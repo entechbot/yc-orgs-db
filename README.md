@@ -20,7 +20,7 @@ Table `public.companies`, with one row per company:
 
 | Group | Columns |
 |---|---|
-| YC data (refreshed by import) | `id` (YC id, PK), `slug` (unique), `name`, `former_names[]`, `website`, `one_liner`, `long_description`, `batch`, `batch_sort` (generated, e.g. Summer 2024 → 20243), `status`, `stage`, `industry`, `subindustry`, `industries[]`, `tags[]`, `regions[]`, `all_locations`, `team_size`, `launched_at`, `is_hiring`, `nonprofit`, `top_company`, `logo_url`, `yc_url`, `source` (`yc-oss`/`manual`), `synced_at` |
+| YC data (refreshed by import) | `id` (YC id, PK), `slug` (unique), `name`, `former_names[]`, `website`, `one_liner`, `long_description`, `batch`, `batch_sort` (generated, e.g. Summer 2024 → 20243), `status`, `stage`, `industry`, `subindustry`, `industries[]`, `tags[]`, `regions[]`, `all_locations`, `team_size`, `launched_at`, `is_hiring`, `nonprofit`, `top_company`, `logo_url`, `yc_url`, `source` (`yc-oss`/`manual`), `synced_at`, `removed_from_source_at` |
 | Outreach (never touched by import) | `contact_status` (not_contacted, queued, contacted, replied, interested, not_interested, customer, do_not_contact), `owner`, `contact_name`, `contact_email`, `last_contacted_at`, `next_follow_up`, `notes` |
 | Bookkeeping | `created_at`, `updated_at` (trigger) |
 
@@ -30,34 +30,46 @@ RLS policy: the `authenticated` role has full access, and `anon` has none.
 
 ## Credentials (none are stored in this repo)
 
-| What | Where |
-|---|---|
-| Supabase personal access token (schema + import) | env var `SUPABASE_ACCESS_TOKEN`. On the entechbot machine it is the GeckIt secret `supabase-token`. Create one at https://supabase.com/dashboard/account/tokens |
-| UI login | Supabase Auth user `admin@entechsolutions.com`. On the entechbot machine its password is the GeckIt secret `yc-orgs-ui-login`. |
-| `web/config.js` | Project URL + **publishable** key. These are public by design; RLS protects the data. |
+| What | Used by | Where it lives |
+|---|---|---|
+| Supabase **secret API key** (`sb_secret_…`, project-scoped, bypasses RLS) | import script / daily sync | GitHub Actions secret `SUPABASE_SECRET_KEY` in `entechbot/yc-orgs-db` (Settings → Secrets and variables → Actions). Get it in Supabase dashboard → Project Settings → API Keys. |
+| Supabase **personal access token** (account-wide, keep it off CI) | `apply_schema.py`, ad-hoc SQL | env var `SUPABASE_ACCESS_TOKEN`. On the entechbot machine it is the GeckIt secret `supabase-token`. |
+| UI login | people | Supabase Auth users, e.g. `admin@entechsolutions.com` (Authentication → Users). |
+| `web/config.js` | UI | Project URL + **publishable** key. These are public by design; RLS protects the data. |
 
-## Re-running the import
+To rotate the sync key, create a new secret key in the Supabase dashboard and run
+`gh secret set SUPABASE_SECRET_KEY -R entechbot/yc-orgs-db` (it reads the value from stdin). Then delete the old key.
 
-The import is idempotent. It upserts on `id`, overwrites only the YC columns and keeps all outreach data.
-Companies that disappear from the source are not deleted. They keep an older `synced_at`.
+## Keeping the data current (daily sync)
+
+`.github/workflows/sync.yml` runs `scripts/import_companies.py` **every day at 04:17 UTC** on GitHub Actions.
+
+- **Run it manually:** GitHub → Actions → *Sync YC companies* → *Run workflow*, or
+  `gh workflow run sync.yml -R entechbot/yc-orgs-db`. Logs are under the Actions tab.
+- **Outreach fields** (`contact_status`, `owner`, `contact_name`, `contact_email`, `last_contacted_at`,
+  `next_follow_up`, `notes`) are never sent by the import, so they are never overwritten.
+- **Companies that disappear from yc-oss are never deleted.** The import sets `removed_from_source_at` and
+  keeps the row and its outreach data. If the company reappears, the timestamp is cleared. In the UI, tick
+  *No longer in YC data* to list them. The company view also shows the date.
+- **Safety:** if the downloaded dataset has fewer than 80% of the companies currently in the DB, the run aborts
+  before changing anything, and the job fails, so GitHub emails the repo owner.
+- **Slug clash:** if a manually added company has the same slug as a new YC company, the manual row is renamed
+  to `<slug>-manual-<id>` and a warning is logged. Merge the two by hand.
+- GitHub disables scheduled workflows in a repo after 60 days without commits. If that happens, re-enable it on
+  the Actions tab. The daily API traffic should also keep the free Supabase project from pausing for inactivity.
+
+## Running the import by hand
 
 ```bash
-export SUPABASE_ACCESS_TOKEN=...          # personal access token
-python3 scripts/apply_schema.py           # only needed when schema.sql changes (safe to re-run)
+export SUPABASE_SECRET_KEY=...            # project secret key, see Credentials
 python3 scripts/import_companies.py       # downloads all.json and upserts it
 # or from a local copy:  python3 scripts/import_companies.py --file data/all.json
 ```
 
-On the entechbot GeckIt machine, the broker proxy can't download from github.io. Download the file first,
-then run the import with the secret:
+Schema changes: edit `supabase/schema.sql`, then run `SUPABASE_ACCESS_TOKEN=... python3 scripts/apply_schema.py`.
+It is idempotent and uses the Management API SQL endpoint, so no database password is needed.
 
-```bash
-mkdir -p data && curl -sSfL -o data/all.json https://yc-oss.github.io/api/companies/all.json
-geckit secrets run --env SUPABASE_ACCESS_TOKEN=secret:supabase-token -- python3 scripts/import_companies.py --file data/all.json
-```
-
-Requirements: Python 3.9+ and `curl`. No pip packages are needed. The scripts call the Supabase Management API
-SQL endpoint, so no database password is needed.
+Requirements: Python 3.9+ and `curl`. No pip packages are needed.
 
 ## UI (`web/`)
 

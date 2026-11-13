@@ -96,6 +96,7 @@ function applyFilters(q) {
   if (v("#f-contact")) q = q.eq("contact_status", v("#f-contact"));
   if (v("#f-owner")) q = q.ilike("owner", `%${v("#f-owner")}%`);
   if ($("#f-hiring").checked) q = q.eq("is_hiring", true);
+  if ($("#f-removed").checked) q = q.not("removed_from_source_at", "is", null);
   const [col, dir] = $("#f-sort").value.split(".");
   return q.order(col, { ascending: dir === "asc", nullsFirst: false }).order("id");
 }
@@ -152,6 +153,7 @@ function showDetail(c) {
     c.website && `<a href="${esc(c.website)}" target="_blank" rel="noopener">${esc(c.website)}</a>`,
     c.yc_url && `<a href="${esc(c.yc_url)}" target="_blank" rel="noopener">YC profile</a>`,
     `source: ${esc(c.source)}`,
+    c.removed_from_source_at && `<b>no longer in YC data since ${esc(c.removed_from_source_at.slice(0, 10))}</b>`,
   ].filter(Boolean).join(" · ");
   $("#d-info").innerHTML = isNew ? "" : `
     <div>${[c.batch, c.status, c.stage, c.industry, c.team_size != null && `${c.team_size} people`, c.is_hiring && "hiring"].filter(Boolean).map(esc).join(" · ")}</div>

@@ -1,0 +1,21 @@
+name: Sync YC companies
+on:
+  schedule:
+    - cron: "17 4 * * *"   # daily 04:17 UTC
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: sync-yc-companies
+  cancel-in-progress: false
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Import yc-oss/api into Supabase
+        env:
+          SUPABASE_URL: https://swgepccnutjowghlgtnc.supabase.co
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: python3 scripts/import_companies.py

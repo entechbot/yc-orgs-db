@@ -33,6 +33,7 @@ create table if not exists public.companies (
   yc_url            text,
   source            text not null default 'manual',   -- 'yc-oss' for imported rows
   synced_at         timestamptz,                      -- last import that saw this company
+  removed_from_source_at timestamptz,                 -- set when a yc-oss company disappears from the source
 
   -- Marketing / outreach tracking (never touched by the import)
   contact_status    text not null default 'not_contacted',
@@ -56,6 +57,9 @@ create table if not exists public.companies (
 );
 
 alter sequence public.companies_manual_id_seq owned by public.companies.id;
+
+-- Columns added after the first release (no-ops on fresh installs).
+alter table public.companies add column if not exists removed_from_source_at timestamptz;
 
 do $$ begin
   alter table public.companies add constraint companies_contact_status_check check (contact_status in
