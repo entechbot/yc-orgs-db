@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>YC Companies – Outreach DB</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
+</head>
+<body>
+  <!-- Login -->
+  <section id="login-view" class="center" hidden>
+    <form id="login-form" class="card narrow">
+      <h1>YC Companies</h1>
+      <p class="muted" id="login-mode-text">Sign in to continue</p>
+      <label>Email <input id="login-email" name="email" type="email" autocomplete="username" required></label>
+      <label>Password <input id="login-password" name="password" type="password" autocomplete="current-password" required></label>
+      <button type="submit" id="login-submit">Sign in</button>
+      <p id="login-error" class="error" role="alert"></p>
+    </form>
+  </section>
+
+  <!-- App -->
+  <section id="app-view" hidden>
+    <header class="topbar">
+      <h1>YC Companies</h1>
+      <span id="total" class="muted"></span>
+      <span class="spacer"></span>
+      <button id="add-btn" type="button">+ Add company</button>
+      <button id="export-btn" type="button" class="secondary">Export CSV</button>
+      <span id="user-email" class="muted"></span>
+      <button id="logout-btn" type="button" class="secondary">Sign out</button>
+    </header>
+
+    <form id="filters" class="filters">
+      <input id="f-search" type="search" placeholder="Search name, one-liner, website…" aria-label="Search">
+      <select id="f-batch" aria-label="Batch"><option value="">All batches</option></select>
+      <select id="f-status" aria-label="Status"><option value="">All statuses</option></select>
+      <select id="f-industry" aria-label="Industry"><option value="">All industries</option></select>
+      <select id="f-region" aria-label="Region"><option value="">All regions</option></select>
+      <input id="f-tag" list="tag-options" placeholder="Tag" aria-label="Tag">
+      <datalist id="tag-options"></datalist>
+      <select id="f-contact" aria-label="Contact status"><option value="">Any contact status</option></select>
+      <input id="f-owner" placeholder="Owner" aria-label="Owner">
+      <label class="inline"><input id="f-hiring" type="checkbox"> Hiring</label>
+      <select id="f-sort" aria-label="Sort">
+        <option value="name.asc">Name A–Z</option>
+        <option value="batch_sort.desc">Newest batch</option>
+        <option value="batch_sort.asc">Oldest batch</option>
+        <option value="team_size.desc">Largest team</option>
+        <option value="updated_at.desc">Recently updated</option>
+        <option value="next_follow_up.asc">Next follow-up</option>
+      </select>
+      <button type="button" id="reset-btn" class="secondary">Reset</button>
+    </form>
+
+    <div class="table-wrap">
+      <table id="results">
+        <thead>
+          <tr><th></th><th>Company</th><th>Batch</th><th>Status</th><th>Industry</th><th>Team</th><th>Location</th><th>Contact status</th><th>Owner</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <footer class="pager">
+      <button id="prev-btn" type="button" class="secondary">← Prev</button>
+      <span id="page-info"></span>
+      <button id="next-btn" type="button" class="secondary">Next →</button>
+    </footer>
+  </section>
+
+  <!-- Company detail / edit -->
+  <dialog id="detail">
+    <form id="detail-form" method="dialog">
+      <header class="detail-head">
+        <img id="d-logo" alt="" width="48" height="48">
+        <div>
+          <h2 id="d-title"></h2>
+          <div id="d-links" class="muted"></div>
+        </div>
+        <button type="button" class="secondary close-btn" id="close-btn" aria-label="Close">✕</button>
+      </header>
+      <div id="d-info" class="info"></div>
+
+      <fieldset id="core-fields">
+        <legend>Company</legend>
+        <div class="grid">
+          <label>Name <input name="name" required></label>
+          <label>Slug <input name="slug" required pattern="[a-z0-9-]+"></label>
+          <label>Website <input name="website" type="url"></label>
+          <label>Batch <input name="batch" placeholder="e.g. Summer 2024"></label>
+          <label>Status <input name="status" placeholder="Active"></label>
+          <label>Industry <input name="industry"></label>
+          <label>Team size <input name="team_size" type="number" min="0"></label>
+          <label>Location <input name="all_locations"></label>
+        </div>
+        <label>One-liner <input name="one_liner"></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Outreach</legend>
+        <div class="grid">
+          <label>Contact status <select name="contact_status" id="d-contact-status"></select></label>
+          <label>Owner <input name="owner"></label>
+          <label>Contact name <input name="contact_name"></label>
+          <label>Contact email <input name="contact_email" type="email"></label>
+          <label>Last contacted <input name="last_contacted_at" type="date"></label>
+          <label>Next follow-up <input name="next_follow_up" type="date"></label>
+        </div>
+        <label>Notes <textarea name="notes" rows="4"></textarea></label>
+      </fieldset>
+
+      <footer class="detail-foot">
+        <button type="button" id="delete-btn" class="danger">Delete</button>
+        <span id="save-msg" class="muted" role="status"></span>
+        <span class="spacer"></span>
+        <button type="button" id="cancel-btn" class="secondary">Cancel</button>
+        <button type="submit" id="save-btn">Save</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>

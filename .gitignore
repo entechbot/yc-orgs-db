@@ -1,0 +1,10 @@
+# Secrets / local env — never commit credentials
+.env
+.env.*
+*.local
+# Data downloads
+data/
+__pycache__/
+*.pyc
+node_modules/
+.DS_Store
