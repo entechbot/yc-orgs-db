@@ -115,7 +115,7 @@ async function load() {
   $("#results tbody").innerHTML = data.map((c) => `
     <tr data-id="${c.id}">
       <td>${c.logo_url ? `<img src="${esc(c.logo_url)}" alt="" loading="lazy">` : ""}</td>
-      <td><strong>${esc(c.name)}</strong><div class="one-liner">${esc(c.one_liner)}</div></td>
+      <td><a href="#" class="open-company"><strong>${esc(c.name)}</strong></a><div class="one-liner">${esc(c.one_liner)}</div></td>
       <td>${esc(c.batch)}</td><td>${esc(c.status)}</td><td>${esc(c.industry)}</td>
       <td>${c.team_size ?? ""}</td><td>${esc(c.all_locations)}</td>
       <td><span class="pill ${esc(c.contact_status)}">${esc(label(c.contact_status))}</span></td>
@@ -129,7 +129,13 @@ $("#filters").addEventListener("submit", (e) => e.preventDefault());
 $("#reset-btn").addEventListener("click", () => { $("#filters").reset(); page = 0; load(); });
 $("#prev-btn").addEventListener("click", () => { page--; load(); });
 $("#next-btn").addEventListener("click", () => { page++; load(); });
-$("#results tbody").addEventListener("click", (e) => { const tr = e.target.closest("tr"); if (tr) openCompany(Number(tr.dataset.id)); });
+// Whole row is clickable; the name is a real link so it also works from the keyboard.
+$("#results tbody").addEventListener("click", (e) => {
+  const tr = e.target.closest("tr");
+  if (!tr) return;
+  e.preventDefault();
+  openCompany(Number(tr.dataset.id));
+});
 
 // ---------- detail / edit ----------
 const form = $("#detail-form");
