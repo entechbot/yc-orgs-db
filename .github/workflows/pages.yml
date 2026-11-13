@@ -20,6 +20,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - name: Cache-bust local assets with the commit id
+        run: sed -i -E 's/(href|src)="(style\.css|config\.js|app\.js)"/\1="\2?v=${{ github.sha }}"/' web/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web
