@@ -108,7 +108,7 @@ async function load() {
     .range(from, from + PAGE_SIZE - 1);
   if (error) { alert(error.message); return; }
   total = count ?? 0;
-  $("#total").textContent = `${total.toLocaleString()} companies`;
+  $("#total").textContent = `${total.toLocaleString()} ${total === 1 ? "company" : "companies"}`;
   $("#page-info").textContent = total ? `${from + 1}–${Math.min(from + PAGE_SIZE, total)} of ${total.toLocaleString()}` : "No matches";
   $("#prev-btn").disabled = page === 0;
   $("#next-btn").disabled = from + PAGE_SIZE >= total;
