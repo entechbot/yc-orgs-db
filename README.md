@@ -22,6 +22,7 @@ Table `public.companies`, with one row per company:
 |---|---|
 | YC data (refreshed by import) | `id` (YC id, PK), `slug` (unique), `name`, `former_names[]`, `website`, `one_liner`, `long_description`, `batch`, `batch_sort` (generated, e.g. Summer 2024 → 20243), `status`, `stage`, `industry`, `subindustry`, `industries[]`, `tags[]`, `regions[]`, `all_locations`, `team_size`, `launched_at`, `is_hiring`, `nonprofit`, `top_company`, `logo_url`, `yc_url`, `source` (`yc-oss`/`manual`), `synced_at`, `removed_from_source_at` |
 | Outreach (never touched by import) | `contact_status` (not_contacted, queued, contacted, replied, interested, not_interested, customer, do_not_contact), `owner`, `contact_name`, `contact_email`, `last_contacted_at`, `next_follow_up`, `notes` |
+| NetSuite check (set by `load_netsuite_results.py`, never touched by import) | `netsuite_status` (unknown, confirmed, likely, ruled_out), `netsuite_strength` (strong, medium, weak), `netsuite_evidence` (quotes + URLs, or the DNS record), `netsuite_checked_at` (date of the result file), `netsuite_note` (caveats, or why it was ruled out) |
 | Bookkeeping | `created_at`, `updated_at` (trigger) |
 
 Companies added by hand get ids from 100000000 upward, so they never clash with YC ids.
@@ -47,7 +48,8 @@ To rotate the sync key, create a new secret key in the Supabase dashboard and ru
 - **Run it manually:** GitHub → Actions → *Sync YC companies* → *Run workflow*, or
   `gh workflow run sync.yml -R entechbot/yc-orgs-db`. Logs are under the Actions tab.
 - **Outreach fields** (`contact_status`, `owner`, `contact_name`, `contact_email`, `last_contacted_at`,
-  `next_follow_up`, `notes`) are never sent by the import, so they are never overwritten.
+  `next_follow_up`, `notes`) and the **NetSuite fields** (`netsuite_*`) are never sent by the import, so they are
+  never overwritten. The script asserts this before it uploads anything.
 - **Companies that disappear from yc-oss are never deleted.** The import sets `removed_from_source_at` and
   keeps the row and its outreach data. If the company reappears, the timestamp is cleared. In the UI, tick
   *No longer in YC data* to list them. The company view also shows the date.
@@ -71,13 +73,34 @@ It is idempotent and uses the Management API SQL endpoint, so no database passwo
 
 Requirements: Python 3.9+ and `curl`. No pip packages are needed.
 
+## NetSuite check results
+
+The NetSuite campaign repo (`treg-export`, `tools/lead_pipeline/out/yc_netsuite_free_<date>.json`) produces free
+NetSuite checks of the YC pool. Load one or more result files with:
+
+```bash
+SUPABASE_ACCESS_TOKEN=... python3 scripts/load_netsuite_results.py [--dry-run] path/to/yc_netsuite_free_*.json
+# on the entechbot machine:
+geckit secrets run --env SUPABASE_ACCESS_TOKEN=secret:supabase-token -- python3 scripts/load_netsuite_results.py FILE...
+```
+
+- **Mapping:** `confirmed[]` → `confirmed`, with the file's strength, its evidence quotes/URLs and caveats as the note.
+  `dropped_borderline[]` with a strong/medium signal (dropped for size/ICP, not for the evidence) → `likely`.
+  Those with a weak or vendor signal → `ruled_out`, and the reason goes in the note. Wrong-company matches
+  (signal `n/a`) say nothing about the YC company, so they are skipped.
+- **Matching:** `slug` if the record has one, else `domain` against the host of `website` (`www.` ignored). Unmatched
+  and ambiguous records are listed and skipped.
+- **Order:** files are applied by the date in the file name (else `created`), so later files win per company.
+  Companies that a file does not mention keep their values. Only the `netsuite_*` columns are written.
+- Re-running the same file is harmless. `--dry-run` shows the matches without writing.
+
 ## UI (`web/`)
 
 It's plain HTML/JS with [supabase-js](https://supabase.com/docs/reference/javascript) from a CDN. There's no build step.
 
 - Search by name, one-liner, website or description. Filter by batch, status, industry, region, tag, contact status,
-  owner and hiring. Sort and page through results, and export the current filter to CSV.
-- Click a row to see the full company and edit its outreach fields. Company fields are read-only for imported rows
+  owner, hiring, NetSuite status (*confirmed or likely* = NetSuite users) and NetSuite strength. Sort and page through results, and export the current filter to CSV.
+- Click a row to see the full company, including the NetSuite evidence (read-only), and edit its outreach fields. Company fields are read-only for imported rows
   (the next import would overwrite them) and editable for manual rows. You can also add and delete companies.
 
 Run locally: `python3 -m http.server -d web 8000` and open http://localhost:8000.

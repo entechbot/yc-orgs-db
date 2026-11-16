@@ -37,6 +37,9 @@ td .one-liner { color: var(--muted); font-size: 12px; }
 .pill.not_contacted { background: #eef0f4; } .pill.queued { background: #e8f0fe; } .pill.contacted { background: #fff4d6; }
 .pill.replied, .pill.interested { background: #dff5e3; } .pill.customer { background: #c9f0d1; }
 .pill.not_interested, .pill.do_not_contact { background: #fde2e1; }
+.pill.ns-confirmed { background: #c9f0d1; } .pill.ns-likely { background: #fff4d6; } .pill.ns-ruled_out { background: #eef0f4; color: var(--muted); }
+.netsuite { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: #fafbfc; }
+.netsuite a { word-break: break-all; }
 .pager { display: flex; justify-content: center; align-items: center; gap: 16px; padding: 14px; }
 
 dialog { width: min(820px, 96vw); max-height: 92vh; border: 1px solid var(--line); border-radius: 12px; padding: 0; }

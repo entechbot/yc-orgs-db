@@ -44,6 +44,13 @@ create table if not exists public.companies (
   next_follow_up    date,
   notes             text,
 
+  -- NetSuite check results (scripts/load_netsuite_results.py; never touched by the import)
+  netsuite_status     text not null default 'unknown',  -- unknown | confirmed | likely | ruled_out
+  netsuite_strength   text,                             -- strong | medium | weak
+  netsuite_evidence   text,                             -- quotes + URLs, or the DNS record
+  netsuite_checked_at date,
+  netsuite_note       text,                             -- caveats, or why it was ruled out
+
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now(),
 
@@ -60,16 +67,32 @@ alter sequence public.companies_manual_id_seq owned by public.companies.id;
 
 -- Columns added after the first release (no-ops on fresh installs).
 alter table public.companies add column if not exists removed_from_source_at timestamptz;
+alter table public.companies add column if not exists netsuite_status text not null default 'unknown';
+alter table public.companies add column if not exists netsuite_strength text;
+alter table public.companies add column if not exists netsuite_evidence text;
+alter table public.companies add column if not exists netsuite_checked_at date;
+alter table public.companies add column if not exists netsuite_note text;
 
 do $$ begin
   alter table public.companies add constraint companies_contact_status_check check (contact_status in
     ('not_contacted', 'queued', 'contacted', 'replied', 'interested', 'not_interested', 'customer', 'do_not_contact'));
 exception when duplicate_object then null; end $$;
 
+do $$ begin
+  alter table public.companies add constraint companies_netsuite_status_check check (netsuite_status in
+    ('unknown', 'confirmed', 'likely', 'ruled_out'));
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table public.companies add constraint companies_netsuite_strength_check check (netsuite_strength in
+    ('strong', 'medium', 'weak'));
+exception when duplicate_object then null; end $$;
+
 create index if not exists companies_batch_sort_idx on public.companies (batch_sort);
 create index if not exists companies_status_idx on public.companies (status);
 create index if not exists companies_industry_idx on public.companies (industry);
 create index if not exists companies_contact_status_idx on public.companies (contact_status);
+create index if not exists companies_netsuite_status_idx on public.companies (netsuite_status);
 create index if not exists companies_tags_idx on public.companies using gin (tags);
 create index if not exists companies_industries_idx on public.companies using gin (industries);
 create index if not exists companies_regions_idx on public.companies using gin (regions);
@@ -104,7 +127,12 @@ create or replace view public.company_facets with (security_invoker = true) as
   union all
   select 'region', r, null, count(*) from public.companies, unnest(regions) r group by r
   union all
-  select 'tag', t, null, count(*) from public.companies, unnest(tags) t group by t;
+  select 'tag', t, null, count(*) from public.companies, unnest(tags) t group by t
+  union all
+  select 'netsuite_status', netsuite_status, null, count(*) from public.companies group by netsuite_status
+  union all
+  select 'netsuite_strength', netsuite_strength, null, count(*) from public.companies
+    where netsuite_strength is not null group by netsuite_strength;
 
 revoke all on public.company_facets from anon;
 grant select on public.company_facets to authenticated;

@@ -44,6 +44,8 @@
       <datalist id="tag-options"></datalist>
       <select id="f-contact" aria-label="Contact status"><option value="">Any contact status</option></select>
       <input id="f-owner" placeholder="Owner" aria-label="Owner">
+      <select id="f-ns-status" aria-label="NetSuite status"><option value="">NetSuite: any</option></select>
+      <select id="f-ns-strength" aria-label="NetSuite evidence strength"><option value="">Any NetSuite strength</option></select>
       <label class="inline"><input id="f-hiring" type="checkbox"> Hiring</label>
       <label class="inline" title="Companies that disappeared from the yc-oss dataset (kept, not deleted)"><input id="f-removed" type="checkbox"> No longer in YC data</label>
       <select id="f-sort" aria-label="Sort">
@@ -60,7 +62,7 @@
     <div class="table-wrap">
       <table id="results">
         <thead>
-          <tr><th></th><th>Company</th><th>Batch</th><th>Status</th><th>Industry</th><th>Team</th><th>Location</th><th>Contact status</th><th>Owner</th></tr>
+          <tr><th></th><th>Company</th><th>Batch</th><th>Status</th><th>Industry</th><th>Team</th><th>Location</th><th>NetSuite</th><th>Contact status</th><th>Owner</th></tr>
         </thead>
         <tbody></tbody>
       </table>
@@ -84,6 +86,7 @@
         <button type="button" class="secondary close-btn" id="close-btn" aria-label="Close">✕</button>
       </header>
       <div id="d-info" class="info"></div>
+      <div id="d-netsuite" class="info netsuite"></div>
 
       <fieldset id="core-fields">
         <legend>Company</legend>

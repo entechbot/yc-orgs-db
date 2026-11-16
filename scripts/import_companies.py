@@ -1,7 +1,8 @@
 """Import / refresh all YC companies from yc-oss/api into Supabase.
 
 Idempotent upsert keyed on the YC company id (Supabase REST API):
-- YC columns are overwritten; outreach columns (contact_status, owner, notes, ...) are never sent, so never touched.
+- YC columns are overwritten; outreach columns (contact_status, owner, notes, ...) and NetSuite columns
+  (netsuite_*, set by load_netsuite_results.py) are never sent, so never touched.
 - Companies no longer in the source are NOT deleted: they get `removed_from_source_at` set
   (cleared again if they reappear). Rows and their outreach data stay.
 - A manual row whose slug collides with a new YC company is renamed to `<slug>-manual-<id>` (with a warning).
@@ -27,6 +28,9 @@ SOURCE_URL = "https://yc-oss.github.io/api/companies/all.json"
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://swgepccnutjowghlgtnc.supabase.co")
 BATCH_SIZE = 500
 MIN_SOURCE_RATIO = 0.8
+# Columns owned by people / other scripts; the import must never send them.
+NEVER_SENT = {"contact_status", "owner", "contact_name", "contact_email", "last_contacted_at", "next_follow_up", "notes",
+              "netsuite_status", "netsuite_strength", "netsuite_evidence", "netsuite_checked_at", "netsuite_note"}
 
 
 def load(path):
@@ -127,6 +131,7 @@ def main():
     args = ap.parse_args()
 
     rows = [to_row(c) for c in load(args.file)]
+    assert not rows or not NEVER_SENT & set(rows[0]), "to_row() must not send outreach/NetSuite columns"
     run_ts = datetime.now(timezone.utc).isoformat()
     current = count("source=eq.yc-oss&removed_from_source_at=is.null")
     print(f"source: {len(rows)} companies; db currently has {current} active yc-oss rows")

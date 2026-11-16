@@ -6,13 +6,18 @@ const PAGE_SIZE = 50;
 const CONTACT_STATUSES = [
   "not_contacted", "queued", "contacted", "replied", "interested", "not_interested", "customer", "do_not_contact",
 ];
-const LIST_COLUMNS = "id,slug,name,one_liner,logo_url,batch,status,industry,team_size,all_locations,contact_status,owner";
+const NETSUITE_STATUSES = ["confirmed", "likely", "ruled_out", "unknown"];
+const NETSUITE_STRENGTHS = ["strong", "medium", "weak"];
+const NETSUITE_FIELDS = ["netsuite_status", "netsuite_strength", "netsuite_evidence", "netsuite_checked_at", "netsuite_note"];
+const LIST_COLUMNS = "id,slug,name,one_liner,logo_url,batch,status,industry,team_size,all_locations,contact_status,owner,netsuite_status,netsuite_strength";
 const CORE_FIELDS = ["name", "slug", "website", "batch", "status", "industry", "team_size", "all_locations", "one_liner"];
 const OUTREACH_FIELDS = ["contact_status", "owner", "contact_name", "contact_email", "last_contacted_at", "next_follow_up", "notes"];
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const label = (s) => String(s).replace(/_/g, " ");
+// Escape, then turn http(s) URLs into links (NetSuite evidence holds quotes followed by their source URL).
+const linkify = (s) => esc(s).replace(/https?:\/\/[^\s<"']+/g, (u) => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
 
 let page = 0;
 let total = 0;
@@ -66,8 +71,9 @@ async function facet(name, order) {
 }
 
 async function loadFacets() {
-  const [batches, statuses, industries, regions, tags] = await Promise.all([
+  const [batches, statuses, industries, regions, tags, nsStatuses, nsStrengths] = await Promise.all([
     facet("batch", "sort"), facet("status", "n"), facet("industry", "n"), facet("region", "n"), facet("tag", "value"),
+    facet("netsuite_status", "n"), facet("netsuite_strength", "n"),
   ]);
   const withCount = (f) => `${f.value} (${f.n})`;
   fillSelect($("#f-batch"), batches, withCount);
@@ -76,6 +82,14 @@ async function loadFacets() {
   fillSelect($("#f-region"), regions, withCount);
   $("#tag-options").replaceChildren(...tags.map((t) => new Option(t.value)));
   fillSelect($("#f-contact"), CONTACT_STATUSES, label);
+  // Fixed order with counts from the facet view; "confirmed or likely" is the usual "NetSuite users" filter.
+  const nsCount = (rows, v) => rows.find((r) => r.value === v)?.n ?? 0;
+  const nsUsers = nsCount(nsStatuses, "confirmed") + nsCount(nsStatuses, "likely");
+  fillSelect($("#f-ns-status"), [
+    { value: "confirmed,likely", text: `NetSuite: confirmed or likely (${nsUsers})` },
+    ...NETSUITE_STATUSES.map((s) => ({ value: s, text: `NetSuite: ${label(s)} (${nsCount(nsStatuses, s)})` })),
+  ], (o) => o.text);
+  fillSelect($("#f-ns-strength"), NETSUITE_STRENGTHS.map((s) => ({ value: s, text: `NetSuite strength: ${s} (${nsCount(nsStrengths, s)})` })), (o) => o.text);
   $("#d-contact-status").replaceChildren(...CONTACT_STATUSES.map((s) => new Option(label(s), s)));
   facetsLoaded = true;
 }
@@ -95,6 +109,8 @@ function applyFilters(q) {
   if (v("#f-tag")) q = q.contains("tags", [v("#f-tag")]);
   if (v("#f-contact")) q = q.eq("contact_status", v("#f-contact"));
   if (v("#f-owner")) q = q.ilike("owner", `%${v("#f-owner")}%`);
+  if (v("#f-ns-status")) q = q.in("netsuite_status", v("#f-ns-status").split(","));
+  if (v("#f-ns-strength")) q = q.eq("netsuite_strength", v("#f-ns-strength"));
   if ($("#f-hiring").checked) q = q.eq("is_hiring", true);
   if ($("#f-removed").checked) q = q.not("removed_from_source_at", "is", null);
   const [col, dir] = $("#f-sort").value.split(".");
@@ -118,6 +134,7 @@ async function load() {
       <td><a href="#" class="open-company"><strong>${esc(c.name)}</strong></a><div class="one-liner">${esc(c.one_liner)}</div></td>
       <td>${esc(c.batch)}</td><td>${esc(c.status)}</td><td>${esc(c.industry)}</td>
       <td>${c.team_size ?? ""}</td><td>${esc(c.all_locations)}</td>
+      <td>${c.netsuite_status === "unknown" ? "" : `<span class="pill ns-${esc(c.netsuite_status)}">${esc(label(c.netsuite_status))}${c.netsuite_strength ? ` · ${esc(c.netsuite_strength)}` : ""}</span>`}</td>
       <td><span class="pill ${esc(c.contact_status)}">${esc(label(c.contact_status))}</span></td>
       <td>${esc(c.owner)}</td>
     </tr>`).join("");
@@ -168,6 +185,15 @@ function showDetail(c) {
     ${c.regions?.length ? `<div><b>Regions:</b> ${c.regions.map(esc).join(", ")}</div>` : ""}
     ${c.tags?.length ? `<div><b>Tags:</b> ${c.tags.map((t) => `<span class="pill">${esc(t)}</span>`).join(" ")}</div>` : ""}
     ${c.long_description ? `<div class="desc">${esc(c.long_description)}</div>` : ""}`;
+  // NetSuite check results are read-only here; they come from scripts/load_netsuite_results.py.
+  const ns = c && c.netsuite_status !== "unknown";
+  $("#d-netsuite").hidden = !ns;
+  $("#d-netsuite").innerHTML = !ns ? "" : `
+    <div><b>NetSuite:</b> <span class="pill ns-${esc(c.netsuite_status)}">${esc(label(c.netsuite_status))}</span>
+      ${c.netsuite_strength ? `· ${esc(c.netsuite_strength)} evidence` : ""}
+      ${c.netsuite_checked_at ? `<span class="muted">· checked ${esc(c.netsuite_checked_at)}</span>` : ""}</div>
+    ${c.netsuite_evidence ? `<div class="desc"><b>Evidence:</b>\n${linkify(c.netsuite_evidence)}</div>` : ""}
+    ${c.netsuite_note ? `<div class="desc"><b>${c.netsuite_status === "ruled_out" ? "Why ruled out" : "Notes"}:</b>\n${esc(c.netsuite_note)}</div>` : ""}`;
 
   for (const f of [...CORE_FIELDS, ...OUTREACH_FIELDS]) {
     const el = form.elements[f];
@@ -216,7 +242,7 @@ form.elements.name.addEventListener("input", () => {
 
 // ---------- CSV export of the current filter ----------
 $("#export-btn").addEventListener("click", async () => {
-  const cols = ["id", "name", "slug", "website", "one_liner", "batch", "status", "industry", "team_size", "all_locations", "yc_url", ...OUTREACH_FIELDS];
+  const cols = ["id", "name", "slug", "website", "one_liner", "batch", "status", "industry", "team_size", "all_locations", "yc_url", ...OUTREACH_FIELDS, ...NETSUITE_FIELDS];
   const rows = [];
   for (let from = 0; ; from += 1000) {
     const { data, error } = await applyFilters(db.from("companies").select(cols.join(","))).range(from, from + 999);
