@@ -102,11 +102,13 @@ Companies hiring GTM / automation / forward deployed engineers, from the NetSuit
 (`treg-export/outputs/hiring-signal-leads-<date>.csv`). Load a file with:
 
 ```bash
-geckit secrets run --env SUPABASE_ACCESS_TOKEN=secret:supabase-token -- python3 scripts/load_hiring_signal.py [--dry-run] FILE.csv
+geckit secrets run --env SUPABASE_ACCESS_TOKEN=secret:supabase-token -- python3 scripts/load_hiring_signal.py [--dry-run] [--tags hiring-signal,niraj-1-campaign] [--source-label '...'] FILE.csv
 ```
 
-- Every company in the file gets the tag **`hiring-signal`** in `lead_tags`.
-- **Matching** is by domain against the host of `website` (`www.` ignored). A company already in the DB (e.g. from YC) keeps
+- Every company in the file gets the tags from `--tags` (default **`hiring-signal`**) in `lead_tags`. Niraj's campaign uses
+  `--tags hiring-signal,niraj-1-campaign`; list it with `select * from public.companies where 'niraj-1-campaign' = any(lead_tags);`.
+  The Mon/Wed/Fri run that produces these files is `treg-export/tools/hiring_signal/RUNBOOK.md`.
+- **Matching** is by the optional CSV column `db id` (the companies `id`), else by domain against the host of `website` (`www.` ignored). A company already in the DB (e.g. from YC) keeps
   its `source` and data, gets the tag added, and its `hiring_signal_*` columns are filled only where empty. A differing
   value never overwrites: it is appended to `notes` as `[hiring signal <date>] <field>: <value>`.
 - **New companies** are inserted with `source = 'hiring-signal'` and an id from the manual sequence (the import treats them
