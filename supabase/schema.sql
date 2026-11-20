@@ -31,7 +31,7 @@ create table if not exists public.companies (
   top_company       boolean,
   logo_url          text,
   yc_url            text,
-  source            text not null default 'manual',   -- 'yc-oss' for imported rows
+  source            text not null default 'manual',   -- 'yc-oss' for imported rows, 'hiring-signal' for load_hiring_signal.py inserts
   synced_at         timestamptz,                      -- last import that saw this company
   removed_from_source_at timestamptz,                 -- set when a yc-oss company disappears from the source
 
@@ -50,6 +50,22 @@ create table if not exists public.companies (
   netsuite_evidence   text,                             -- quotes + URLs, or the DNS record
   netsuite_checked_at date,
   netsuite_note       text,                             -- caveats, or why it was ruled out
+
+  -- Our own labels, e.g. 'hiring-signal' (never touched by the import; YC's `tags` are overwritten by it)
+  lead_tags         text[] not null default '{}',
+
+  -- Hiring-signal leads (scripts/load_hiring_signal.py; never touched by the import)
+  hiring_signal_fit         text,   -- strong | partial | weak
+  hiring_signal_fit_reason  text,
+  hiring_signal_role        text,   -- job title of the posting
+  hiring_signal_posting_url text,
+  hiring_signal_posted_at   date,
+  hiring_signal_evidence    text,   -- exact quote from the posting
+  hiring_signal_headcount   text,   -- size range from the source, e.g. '51-200'
+  hiring_signal_owner       text,   -- likely owner of the role (unverified)
+  hiring_signal_source      text,   -- e.g. 'treg hiring signal 2026-11-19'
+  hiring_signal_checked_at  date,
+  hiring_signal_note        text,   -- role family, location, tools named, suggested contact, caveats
 
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now(),
@@ -72,6 +88,18 @@ alter table public.companies add column if not exists netsuite_strength text;
 alter table public.companies add column if not exists netsuite_evidence text;
 alter table public.companies add column if not exists netsuite_checked_at date;
 alter table public.companies add column if not exists netsuite_note text;
+alter table public.companies add column if not exists lead_tags text[] not null default '{}';
+alter table public.companies add column if not exists hiring_signal_fit text;
+alter table public.companies add column if not exists hiring_signal_fit_reason text;
+alter table public.companies add column if not exists hiring_signal_role text;
+alter table public.companies add column if not exists hiring_signal_posting_url text;
+alter table public.companies add column if not exists hiring_signal_posted_at date;
+alter table public.companies add column if not exists hiring_signal_evidence text;
+alter table public.companies add column if not exists hiring_signal_headcount text;
+alter table public.companies add column if not exists hiring_signal_owner text;
+alter table public.companies add column if not exists hiring_signal_source text;
+alter table public.companies add column if not exists hiring_signal_checked_at date;
+alter table public.companies add column if not exists hiring_signal_note text;
 
 do $$ begin
   alter table public.companies add constraint companies_contact_status_check check (contact_status in
@@ -93,6 +121,12 @@ create index if not exists companies_status_idx on public.companies (status);
 create index if not exists companies_industry_idx on public.companies (industry);
 create index if not exists companies_contact_status_idx on public.companies (contact_status);
 create index if not exists companies_netsuite_status_idx on public.companies (netsuite_status);
+do $$ begin
+  alter table public.companies add constraint companies_hiring_signal_fit_check check (hiring_signal_fit in
+    ('strong', 'partial', 'weak'));
+exception when duplicate_object then null; end $$;
+
+create index if not exists companies_lead_tags_idx on public.companies using gin (lead_tags);
 create index if not exists companies_tags_idx on public.companies using gin (tags);
 create index if not exists companies_industries_idx on public.companies using gin (industries);
 create index if not exists companies_regions_idx on public.companies using gin (regions);
@@ -132,7 +166,12 @@ create or replace view public.company_facets with (security_invoker = true) as
   select 'netsuite_status', netsuite_status, null, count(*) from public.companies group by netsuite_status
   union all
   select 'netsuite_strength', netsuite_strength, null, count(*) from public.companies
-    where netsuite_strength is not null group by netsuite_strength;
+    where netsuite_strength is not null group by netsuite_strength
+  union all
+  select 'lead_tag', t, null, count(*) from public.companies, unnest(lead_tags) t group by t
+  union all
+  select 'hiring_signal_fit', hiring_signal_fit, null, count(*) from public.companies
+    where hiring_signal_fit is not null group by hiring_signal_fit;
 
 revoke all on public.company_facets from anon;
 grant select on public.company_facets to authenticated;

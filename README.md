@@ -23,6 +23,8 @@ Table `public.companies`, with one row per company:
 | YC data (refreshed by import) | `id` (YC id, PK), `slug` (unique), `name`, `former_names[]`, `website`, `one_liner`, `long_description`, `batch`, `batch_sort` (generated, e.g. Summer 2024 → 20243), `status`, `stage`, `industry`, `subindustry`, `industries[]`, `tags[]`, `regions[]`, `all_locations`, `team_size`, `launched_at`, `is_hiring`, `nonprofit`, `top_company`, `logo_url`, `yc_url`, `source` (`yc-oss`/`manual`), `synced_at`, `removed_from_source_at` |
 | Outreach (never touched by import) | `contact_status` (not_contacted, queued, contacted, replied, interested, not_interested, customer, do_not_contact), `owner`, `contact_name`, `contact_email`, `last_contacted_at`, `next_follow_up`, `notes` |
 | NetSuite check (set by `load_netsuite_results.py`, never touched by import) | `netsuite_status` (unknown, confirmed, likely, ruled_out), `netsuite_strength` (strong, medium, weak), `netsuite_evidence` (quotes + URLs, or the DNS record), `netsuite_checked_at` (date of the result file), `netsuite_note` (caveats, or why it was ruled out) |
+| Lead tags (never touched by import) | `lead_tags[]`: our own labels, e.g. `hiring-signal`. YC's `tags[]` can't be used for this because the import overwrites them. |
+| Hiring signal (set by `load_hiring_signal.py`, never touched by import) | `hiring_signal_fit` (strong, partial, weak), `hiring_signal_fit_reason`, `hiring_signal_role`, `hiring_signal_posting_url`, `hiring_signal_posted_at`, `hiring_signal_evidence` (exact quote), `hiring_signal_headcount` (range, e.g. 51-200), `hiring_signal_owner` (likely owner, unverified), `hiring_signal_source`, `hiring_signal_checked_at`, `hiring_signal_note` |
 | Bookkeeping | `created_at`, `updated_at` (trigger) |
 
 Companies added by hand get ids from 100000000 upward, so they never clash with YC ids.
@@ -94,12 +96,30 @@ geckit secrets run --env SUPABASE_ACCESS_TOKEN=secret:supabase-token -- python3 
   Companies that a file does not mention keep their values. Only the `netsuite_*` columns are written.
 - Re-running the same file is harmless. `--dry-run` shows the matches without writing.
 
+## Hiring-signal leads (non-YC companies too)
+
+Companies hiring GTM / automation / forward deployed engineers, from the NetSuite campaign repo
+(`treg-export/outputs/hiring-signal-leads-<date>.csv`). Load a file with:
+
+```bash
+geckit secrets run --env SUPABASE_ACCESS_TOKEN=secret:supabase-token -- python3 scripts/load_hiring_signal.py [--dry-run] FILE.csv
+```
+
+- Every company in the file gets the tag **`hiring-signal`** in `lead_tags`.
+- **Matching** is by domain against the host of `website` (`www.` ignored). A company already in the DB (e.g. from YC) keeps
+  its `source` and data, gets the tag added, and its `hiring_signal_*` columns are filled only where empty. A differing
+  value never overwrites: it is appended to `notes` as `[hiring signal <date>] <field>: <value>`.
+- **New companies** are inserted with `source = 'hiring-signal'` and an id from the manual sequence (the import treats them
+  like manual rows: never overwritten, renamed only on a slug clash).
+- Re-running a file is harmless (it skips what's already there). Nothing is deleted.
+- Only tagged rows: `select * from companies where 'hiring-signal' = any(lead_tags);` In the UI: the *Hiring signal* filter.
+
 ## UI (`web/`)
 
 It's plain HTML/JS with [supabase-js](https://supabase.com/docs/reference/javascript) from a CDN. There's no build step.
 
 - Search by name, one-liner, website or description. Filter by batch, status, industry, region, tag, contact status,
-  owner, hiring, NetSuite status (*confirmed or likely* = NetSuite users) and NetSuite strength. Sort and page through results, and export the current filter to CSV.
+  owner, hiring, NetSuite status (*confirmed or likely* = NetSuite users), NetSuite strength and hiring-signal leads (by fit). Sort and page through results, and export the current filter to CSV.
 - Click a row to see the full company, including the NetSuite evidence (read-only), and edit its outreach fields. Company fields are read-only for imported rows
   (the next import would overwrite them) and editable for manual rows. You can also add and delete companies.
 

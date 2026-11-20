@@ -1,8 +1,9 @@
 """Import / refresh all YC companies from yc-oss/api into Supabase.
 
 Idempotent upsert keyed on the YC company id (Supabase REST API):
-- YC columns are overwritten; outreach columns (contact_status, owner, notes, ...) and NetSuite columns
-  (netsuite_*, set by load_netsuite_results.py) are never sent, so never touched.
+- YC columns are overwritten; outreach columns (contact_status, owner, notes, ...), NetSuite columns
+  (netsuite_*, set by load_netsuite_results.py) and lead_tags / hiring_signal_* (load_hiring_signal.py) are never sent,
+  so never touched.
 - Companies no longer in the source are NOT deleted: they get `removed_from_source_at` set
   (cleared again if they reappear). Rows and their outreach data stay.
 - A manual row whose slug collides with a new YC company is renamed to `<slug>-manual-<id>` (with a warning).
@@ -30,7 +31,10 @@ BATCH_SIZE = 500
 MIN_SOURCE_RATIO = 0.8
 # Columns owned by people / other scripts; the import must never send them.
 NEVER_SENT = {"contact_status", "owner", "contact_name", "contact_email", "last_contacted_at", "next_follow_up", "notes",
-              "netsuite_status", "netsuite_strength", "netsuite_evidence", "netsuite_checked_at", "netsuite_note"}
+              "netsuite_status", "netsuite_strength", "netsuite_evidence", "netsuite_checked_at", "netsuite_note",
+              "lead_tags", "hiring_signal_fit", "hiring_signal_fit_reason", "hiring_signal_role", "hiring_signal_posting_url",
+              "hiring_signal_posted_at", "hiring_signal_evidence", "hiring_signal_headcount", "hiring_signal_owner",
+              "hiring_signal_source", "hiring_signal_checked_at", "hiring_signal_note"}
 
 
 def load(path):

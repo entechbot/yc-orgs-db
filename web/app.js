@@ -8,6 +8,8 @@ const CONTACT_STATUSES = [
 ];
 const NETSUITE_STATUSES = ["confirmed", "likely", "ruled_out", "unknown"];
 const NETSUITE_STRENGTHS = ["strong", "medium", "weak"];
+const SIGNAL_TAG = "hiring-signal";  // lead_tags value set by scripts/load_hiring_signal.py
+const SIGNAL_FITS = ["strong", "partial", "weak"];
 const NETSUITE_FIELDS = ["netsuite_status", "netsuite_strength", "netsuite_evidence", "netsuite_checked_at", "netsuite_note"];
 const LIST_COLUMNS = "id,slug,name,one_liner,logo_url,batch,status,industry,team_size,all_locations,contact_status,owner,netsuite_status,netsuite_strength";
 const CORE_FIELDS = ["name", "slug", "website", "batch", "status", "industry", "team_size", "all_locations", "one_liner"];
@@ -71,9 +73,9 @@ async function facet(name, order) {
 }
 
 async function loadFacets() {
-  const [batches, statuses, industries, regions, tags, nsStatuses, nsStrengths] = await Promise.all([
+  const [batches, statuses, industries, regions, tags, nsStatuses, nsStrengths, leadTags, signalFits] = await Promise.all([
     facet("batch", "sort"), facet("status", "n"), facet("industry", "n"), facet("region", "n"), facet("tag", "value"),
-    facet("netsuite_status", "n"), facet("netsuite_strength", "n"),
+    facet("netsuite_status", "n"), facet("netsuite_strength", "n"), facet("lead_tag", "n"), facet("hiring_signal_fit", "n"),
   ]);
   const withCount = (f) => `${f.value} (${f.n})`;
   fillSelect($("#f-batch"), batches, withCount);
@@ -90,6 +92,10 @@ async function loadFacets() {
     ...NETSUITE_STATUSES.map((s) => ({ value: s, text: `NetSuite: ${label(s)} (${nsCount(nsStatuses, s)})` })),
   ], (o) => o.text);
   fillSelect($("#f-ns-strength"), NETSUITE_STRENGTHS.map((s) => ({ value: s, text: `NetSuite strength: ${s} (${nsCount(nsStrengths, s)})` })), (o) => o.text);
+  fillSelect($("#f-signal"), [
+    { value: "any", text: `Hiring signal: all (${nsCount(leadTags, SIGNAL_TAG)})` },
+    ...SIGNAL_FITS.map((f) => ({ value: f, text: `Hiring signal: ${f} fit (${nsCount(signalFits, f)})` })),
+  ], (o) => o.text);
   $("#d-contact-status").replaceChildren(...CONTACT_STATUSES.map((s) => new Option(label(s), s)));
   facetsLoaded = true;
 }
@@ -111,6 +117,8 @@ function applyFilters(q) {
   if (v("#f-owner")) q = q.ilike("owner", `%${v("#f-owner")}%`);
   if (v("#f-ns-status")) q = q.in("netsuite_status", v("#f-ns-status").split(","));
   if (v("#f-ns-strength")) q = q.eq("netsuite_strength", v("#f-ns-strength"));
+  if (v("#f-signal")) q = q.contains("lead_tags", [SIGNAL_TAG]);
+  if (SIGNAL_FITS.includes(v("#f-signal"))) q = q.eq("hiring_signal_fit", v("#f-signal"));
   if ($("#f-hiring").checked) q = q.eq("is_hiring", true);
   if ($("#f-removed").checked) q = q.not("removed_from_source_at", "is", null);
   const [col, dir] = $("#f-sort").value.split(".");
@@ -194,6 +202,21 @@ function showDetail(c) {
       ${c.netsuite_checked_at ? `<span class="muted">· checked ${esc(c.netsuite_checked_at)}</span>` : ""}</div>
     ${c.netsuite_evidence ? `<div class="desc"><b>Evidence:</b>\n${linkify(c.netsuite_evidence)}</div>` : ""}
     ${c.netsuite_note ? `<div class="desc"><b>${c.netsuite_status === "ruled_out" ? "Why ruled out" : "Notes"}:</b>\n${esc(c.netsuite_note)}</div>` : ""}`;
+
+  // Hiring-signal lead data is read-only here; it comes from scripts/load_hiring_signal.py.
+  const hs = c && (c.lead_tags || []).includes(SIGNAL_TAG);
+  $("#d-signal").hidden = !hs;
+  $("#d-signal").innerHTML = !hs ? "" : `
+    <div><b>Hiring signal:</b> <span class="pill">${esc(SIGNAL_TAG)}</span>
+      ${c.hiring_signal_fit ? `· ${esc(c.hiring_signal_fit)} fit` : ""}
+      ${c.hiring_signal_headcount ? `· ${esc(c.hiring_signal_headcount)} people` : ""}
+      ${c.hiring_signal_source ? `<span class="muted">· ${esc(c.hiring_signal_source)}</span>` : ""}</div>
+    ${c.hiring_signal_role ? `<div><b>Role:</b> ${esc(c.hiring_signal_role)}${c.hiring_signal_posted_at ? ` (posted ${esc(c.hiring_signal_posted_at)})` : ""}
+      ${c.hiring_signal_posting_url ? ` · ${linkify(c.hiring_signal_posting_url)}` : ""}</div>` : ""}
+    ${c.hiring_signal_evidence ? `<div class="desc"><b>Evidence:</b>\n"${esc(c.hiring_signal_evidence)}"</div>` : ""}
+    ${c.hiring_signal_fit_reason ? `<div><b>Why:</b> ${esc(c.hiring_signal_fit_reason)}</div>` : ""}
+    ${c.hiring_signal_owner ? `<div><b>Likely role owner (unverified):</b> ${esc(c.hiring_signal_owner)}</div>` : ""}
+    ${c.hiring_signal_note ? `<div class="desc"><b>Notes:</b>\n${esc(c.hiring_signal_note)}</div>` : ""}`;
 
   for (const f of [...CORE_FIELDS, ...OUTREACH_FIELDS]) {
     const el = form.elements[f];
