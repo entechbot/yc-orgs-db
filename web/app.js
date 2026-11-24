@@ -91,6 +91,7 @@ async function loadFacets() {
     { value: "confirmed,likely", text: `NetSuite: confirmed or likely (${nsUsers})` },
     ...NETSUITE_STATUSES.map((s) => ({ value: s, text: `NetSuite: ${label(s)} (${nsCount(nsStatuses, s)})` })),
   ], (o) => o.text);
+  fillSelect($("#f-lead-tag"), leadTags, (t) => `Lead tag: ${t.value} (${t.n})`);
   fillSelect($("#f-ns-strength"), NETSUITE_STRENGTHS.map((s) => ({ value: s, text: `NetSuite strength: ${s} (${nsCount(nsStrengths, s)})` })), (o) => o.text);
   fillSelect($("#f-signal"), [
     { value: "any", text: `Hiring signal: all (${nsCount(leadTags, SIGNAL_TAG)})` },
@@ -117,6 +118,7 @@ function applyFilters(q) {
   if (v("#f-owner")) q = q.ilike("owner", `%${v("#f-owner")}%`);
   if (v("#f-ns-status")) q = q.in("netsuite_status", v("#f-ns-status").split(","));
   if (v("#f-ns-strength")) q = q.eq("netsuite_strength", v("#f-ns-strength"));
+  if (v("#f-lead-tag")) q = q.contains("lead_tags", [v("#f-lead-tag")]);
   if (v("#f-signal")) q = q.contains("lead_tags", [SIGNAL_TAG]);
   if (SIGNAL_FITS.includes(v("#f-signal"))) q = q.eq("hiring_signal_fit", v("#f-signal"));
   if ($("#f-hiring").checked) q = q.eq("is_hiring", true);
