@@ -125,7 +125,7 @@ def main():
                         "notes_append": "\n".join(conflicts) or None, "add_tags": ",".join(add_tags) or None})
 
     for i in inserts:
-        print(f"  INSERT  {i['hiring_signal_fit']:<8} {i['name']} ({host(i['website'])}) slug={i['slug']}")
+        print(f"  INSERT  {i['hiring_signal_fit'] or '-':<8} {i['name']} ({host(i['website'])}) slug={i['slug']}")
     for u in updates:
         print(f"  UPDATE  {u['_name']} [{u['_source']}] fill={sorted(u['fill'])} tags+={u['add_tags'] or '-'} "
               f"notes+={'yes' if u['notes_append'] else 'no'}")
