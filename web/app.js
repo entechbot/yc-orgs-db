@@ -11,7 +11,7 @@ const NETSUITE_STRENGTHS = ["strong", "medium", "weak"];
 const SIGNAL_TAG = "hiring-signal";  // lead_tags value set by scripts/load_hiring_signal.py
 const SIGNAL_FITS = ["strong", "partial", "weak"];
 const NETSUITE_FIELDS = ["netsuite_status", "netsuite_strength", "netsuite_evidence", "netsuite_checked_at", "netsuite_note"];
-const LIST_COLUMNS = "id,slug,name,one_liner,logo_url,batch,status,industry,team_size,all_locations,contact_status,owner,netsuite_status,netsuite_strength";
+const LIST_COLUMNS = "id,slug,name,one_liner,logo_url,batch,status,industry,team_size,all_locations,contact_status,owner,netsuite_status,netsuite_strength,lead_tags";
 const CORE_FIELDS = ["name", "slug", "website", "batch", "status", "industry", "team_size", "all_locations", "one_liner"];
 const OUTREACH_FIELDS = ["contact_status", "owner", "contact_name", "contact_email", "last_contacted_at", "next_follow_up", "notes"];
 
@@ -25,6 +25,7 @@ let page = 0;
 let total = 0;
 let current = null; // company open in the dialog (null = new)
 let facetsLoaded = false;
+let leadTagValues = new Set(); // lead_tags values; the Tag filter matches these against lead_tags, others against YC tags
 
 // ---------- auth ----------
 const signupMode = () => location.hash === "#signup";
@@ -82,7 +83,9 @@ async function loadFacets() {
   fillSelect($("#f-status"), statuses, withCount);
   fillSelect($("#f-industry"), industries, withCount);
   fillSelect($("#f-region"), regions, withCount);
-  $("#tag-options").replaceChildren(...tags.map((t) => new Option(t.value)));
+  // One Tag filter for both: our lead tags (e.g. niraj-1-campaign) first, then the YC tags.
+  leadTagValues = new Set(leadTags.map((t) => t.value));
+  $("#tag-options").replaceChildren(...[...leadTags, ...tags].map((t) => new Option(withCount(t), t.value)));
   fillSelect($("#f-contact"), CONTACT_STATUSES, label);
   // Fixed order with counts from the facet view; "confirmed or likely" is the usual "NetSuite users" filter.
   const nsCount = (rows, v) => rows.find((r) => r.value === v)?.n ?? 0;
@@ -91,7 +94,6 @@ async function loadFacets() {
     { value: "confirmed,likely", text: `NetSuite: confirmed or likely (${nsUsers})` },
     ...NETSUITE_STATUSES.map((s) => ({ value: s, text: `NetSuite: ${label(s)} (${nsCount(nsStatuses, s)})` })),
   ], (o) => o.text);
-  fillSelect($("#f-lead-tag"), leadTags, (t) => `Lead tag: ${t.value} (${t.n})`);
   fillSelect($("#f-ns-strength"), NETSUITE_STRENGTHS.map((s) => ({ value: s, text: `NetSuite strength: ${s} (${nsCount(nsStrengths, s)})` })), (o) => o.text);
   fillSelect($("#f-signal"), [
     { value: "any", text: `Hiring signal: all (${nsCount(leadTags, SIGNAL_TAG)})` },
@@ -113,12 +115,11 @@ function applyFilters(q) {
   if (v("#f-status")) q = q.eq("status", v("#f-status"));
   if (v("#f-industry")) q = q.eq("industry", v("#f-industry"));
   if (v("#f-region")) q = q.contains("regions", [v("#f-region")]);
-  if (v("#f-tag")) q = q.contains("tags", [v("#f-tag")]);
+  if (v("#f-tag")) q = q.contains(leadTagValues.has(v("#f-tag")) ? "lead_tags" : "tags", [v("#f-tag")]);
   if (v("#f-contact")) q = q.eq("contact_status", v("#f-contact"));
   if (v("#f-owner")) q = q.ilike("owner", `%${v("#f-owner")}%`);
   if (v("#f-ns-status")) q = q.in("netsuite_status", v("#f-ns-status").split(","));
   if (v("#f-ns-strength")) q = q.eq("netsuite_strength", v("#f-ns-strength"));
-  if (v("#f-lead-tag")) q = q.contains("lead_tags", [v("#f-lead-tag")]);
   if (v("#f-signal")) q = q.contains("lead_tags", [SIGNAL_TAG]);
   if (SIGNAL_FITS.includes(v("#f-signal"))) q = q.eq("hiring_signal_fit", v("#f-signal"));
   if ($("#f-hiring").checked) q = q.eq("is_hiring", true);
@@ -141,7 +142,8 @@ async function load() {
   $("#results tbody").innerHTML = data.map((c) => `
     <tr data-id="${c.id}">
       <td>${c.logo_url ? `<img src="${esc(c.logo_url)}" alt="" loading="lazy">` : ""}</td>
-      <td><a href="#" class="open-company"><strong>${esc(c.name)}</strong></a><div class="one-liner">${esc(c.one_liner)}</div></td>
+      <td><a href="#" class="open-company"><strong>${esc(c.name)}</strong></a><div class="one-liner">${esc(c.one_liner)}</div>
+        ${c.lead_tags?.length ? `<div>${c.lead_tags.map((t) => `<span class="pill">${esc(t)}</span>`).join(" ")}</div>` : ""}</td>
       <td>${esc(c.batch)}</td><td>${esc(c.status)}</td><td>${esc(c.industry)}</td>
       <td>${c.team_size ?? ""}</td><td>${esc(c.all_locations)}</td>
       <td>${c.netsuite_status === "unknown" ? "" : `<span class="pill ns-${esc(c.netsuite_status)}">${esc(label(c.netsuite_status))}${c.netsuite_strength ? ` · ${esc(c.netsuite_strength)}` : ""}</span>`}</td>
@@ -188,12 +190,13 @@ function showDetail(c) {
     `source: ${esc(c.source)}`,
     c.removed_from_source_at && `<b>no longer in YC data since ${esc(c.removed_from_source_at.slice(0, 10))}</b>`,
   ].filter(Boolean).join(" · ");
+  const allTags = isNew ? [] : [...(c.lead_tags || []), ...(c.tags || [])]; // lead tags first, shown like YC tags
   $("#d-info").innerHTML = isNew ? "" : `
     <div>${[c.batch, c.status, c.stage, c.industry, c.team_size != null && `${c.team_size} people`, c.is_hiring && "hiring"].filter(Boolean).map(esc).join(" · ")}</div>
     ${c.subindustry ? `<div><b>Sub-industry:</b> ${esc(c.subindustry)}</div>` : ""}
     ${c.all_locations ? `<div><b>Location:</b> ${esc(c.all_locations)}</div>` : ""}
     ${c.regions?.length ? `<div><b>Regions:</b> ${c.regions.map(esc).join(", ")}</div>` : ""}
-    ${c.tags?.length ? `<div><b>Tags:</b> ${c.tags.map((t) => `<span class="pill">${esc(t)}</span>`).join(" ")}</div>` : ""}
+    ${allTags.length ? `<div><b>Tags:</b> ${allTags.map((t) => `<span class="pill">${esc(t)}</span>`).join(" ")}</div>` : ""}
     ${c.long_description ? `<div class="desc">${esc(c.long_description)}</div>` : ""}`;
   // NetSuite check results are read-only here; they come from scripts/load_netsuite_results.py.
   const ns = c && c.netsuite_status !== "unknown";
